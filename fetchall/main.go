@@ -27,6 +27,7 @@ func main() {
                 return
             }
             body, err := ioutil.ReadAll(resp.Body)
+            defer resp.Body.Close()
             fmt.Printf("%s\t%d\t%s\n", duration, len(body), url)
         }(url, &wg)
     }
