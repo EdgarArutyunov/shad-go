@@ -6,7 +6,7 @@ import (
     "bytes"
     "fmt"
     "image"
-    "image/jpeg"
+    "image/color"
     "image/png"
     "log"
     "net/http"
@@ -71,15 +71,15 @@ func getTime(t string) (MyTime, bool) {
 
     var err error
     res.H, err = strconv.Atoi(tmp[0])
-    if err != nil {
+    if err != nil || len(tmp[0]) != 2 {
         return res, false
     }
     res.M, err = strconv.Atoi(tmp[1])
-    if err != nil {
+    if err != nil || len(tmp[1]) != 2 {
         return res, false
     }
     res.S, err = strconv.Atoi(tmp[2])
-    if err != nil {
+    if err != nil || len(tmp[2]) != 2 {
         return res, false
     }
 
@@ -102,13 +102,17 @@ func getK(k string) (int, bool) {
     return res, true
 }
 
-func SetPixel(img *image.RGBA, pi int, pj int, k int) {
+// SetPixel ...
+func SetPixel(img *image.RGBA, pi int, pj int, k int, c color.RGBA) {
     for i := pi; i < pi+k; i++ {
         for j := pj; j < pj+k; j++ {
-            img.Set(i, j, Cyan)
+            img.Set(i, j, c)
         }
     }
 }
+
+// White ...
+var White = color.RGBA{R: 255, G: 255, B: 255, A: 0xff}
 
 // PrintDig ...
 func PrintDig(img *image.RGBA, k int, val int, w int) {
@@ -146,9 +150,10 @@ func PrintDig(img *image.RGBA, k int, val int, w int) {
     for _, ch := range dig {
         switch ch {
         case '.':
+            SetPixel(img, j, i, k, White)
             j += k
         case '1':
-            SetPixel(img, j, i, k)
+            SetPixel(img, j, i, k, Cyan)
             j += k
         case '\n':
             i += k
@@ -162,10 +167,30 @@ func main() {
         r.ParseForm()
 
         structBody := &Req{
-            Time: r.FormValue("time"),
-            K:    r.FormValue("k"),
+            Time: "r.FormValue()",
+            K:    "r.FormValue()",
         }
 
+        arTime, ok := r.Form["time"]
+        if !ok || len(arTime) == 0 {
+            structBody.Time = ""
+        } else {
+            if arTime[0] == "" {
+                w.WriteHeader(http.StatusBadRequest)
+                return
+            }
+            structBody.Time = arTime[0]
+        }
+        arK, ok := r.Form["k"]
+        if !ok || len(arK) == 0 {
+            structBody.K = ""
+        } else {
+            if arK[0] == "" {
+                w.WriteHeader(http.StatusBadRequest)
+                return
+            }
+            structBody.K = arK[0]
+        }
         finalTime, ok := getTime(structBody.Time)
         if !ok {
             w.WriteHeader(http.StatusBadRequest)
@@ -194,7 +219,7 @@ func main() {
         png.Encode(f, img)
 
         buffer := new(bytes.Buffer)
-        if err := jpeg.Encode(buffer, img, nil); err != nil {
+        if err := png.Encode(buffer, img); err != nil {
             log.Println("unable to encode image.")
         }
 
@@ -213,7 +238,7 @@ func main() {
         return
     }
 
-    if os.Args[1] != "--port" {
+    if os.Args[1] != "-port" {
         err := fmt.Errorf("Usage: ./m -port. Need port arg you send: -->  %s", os.Args[1])
         if err != nil {
             panic(err)
