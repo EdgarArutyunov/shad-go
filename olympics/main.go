@@ -17,8 +17,8 @@ import (
    ...
 */
 
-// Person ...
-type Person struct {
+// PersonInfo ...
+type PersonInfo struct {
     Athlete string `json:"athlete"`
     Age     int    `json:"age"`
     Country string `json:"country"`
@@ -31,10 +31,26 @@ type Person struct {
     Total   int    `json:"total"`
 }
 
+// MedalsResponse ...
+type MedalsResponse struct {
+    Gold   int `json:"gold"`
+    Silver int `json:"silver"`
+    Bronze int `json:"bronze"`
+    Total  int `json:"total"`
+}
+
+// Person ...
+type Person struct {
+    Athlete      string                    `json:"athlete"`
+    Country      string                    `json:"country"`
+    Medals       MedalsResponse            `json:"medals"`
+    MedalsByYear map[string]MedalsResponse `json:"medals_by_year"`
+}
+
 // Store ...
 type Store struct {
-    mutex  *sync.Mutex
-    person []Person
+    mutex   *sync.Mutex
+    persons map[string]Person
 }
 
 // Server ...
@@ -55,16 +71,41 @@ func (store *Store) Init(pathToStoreFile string) {
     if err != nil {
         panic(err)
     }
-    if err := json.Unmarshal(dat, &store.person); err != nil {
+    persons := make([]PersonInfo, 0)
+    if err := json.Unmarshal(dat, &persons); err != nil {
         panic(err)
+    }
+
+    for _, p := range persons {
+        val, ok := store.persons[p.Athlete]
+
+        if !ok {
+            val = Person{
+                Athlete:      p.Athlete,
+                Country:      p.Country,
+                MedalsByYear: make(map[string]MedalsResponse),
+            }
+        }
+        val.Medals.Gold += p.Gold
+        val.Medals.Bronze += p.Bronze
+        val.Medals.Silver += p.Silver
+        val.Medals.Total += p.Total
+
+        val.MedalsByYear[strconv.Itoa(p.Year)] = MedalsResponse{
+            Gold:   p.Gold,
+            Bronze: p.Bronze,
+            Silver: p.Silver,
+            Total:  p.Total,
+        }
+        store.persons[p.Athlete] = val
     }
 }
 
 // NewStore ...
 func NewStore(pathToStoreFile string) *Store {
     store := &Store{
-        mutex:  &sync.Mutex{},
-        person: make([]Person, 0),
+        mutex:   &sync.Mutex{},
+        persons: make(map[string]Person),
     }
     store.Init(pathToStoreFile)
     return store
@@ -112,20 +153,6 @@ func (s *Server) topAthletesHandle() http.HandlerFunc {
 }
 
 func (s *Server) athleteInfoHandle() http.HandlerFunc {
-
-    type MedalsResponse struct {
-        Gold   int `json:"gold"`
-        Silver int `json:"silver"`
-        Bronze int `json:"bronze"`
-        Total  int `json:"total"`
-    }
-    type Response struct {
-        Athlete      string                    `json:"athlete"`
-        Country      string                    `json:"country"`
-        Medals       MedalsResponse            `json:"medals"`
-        MedalsByYear map[string]MedalsResponse `json:"medals_by_year"`
-    }
-
     return func(w http.ResponseWriter, r *http.Request) {
         if r.Method != http.MethodGet {
             s.error(w, r, http.StatusNotFound, "")
@@ -134,33 +161,7 @@ func (s *Server) athleteInfoHandle() http.HandlerFunc {
         r.ParseForm()
         name := r.Form.Get("name")
         found := false
-        resp := &Response{
-            Athlete:      "",
-            Country:      "",
-            Medals:       MedalsResponse{},
-            MedalsByYear: make(map[string]MedalsResponse),
-        }
-        for _, person := range s.store.person {
-            if person.Athlete != name {
-                continue
-            }
-            if !found {
-                resp.Athlete = person.Athlete
-                resp.Country = person.Country
-            }
-            resp.Medals.Gold += person.Gold
-            resp.Medals.Bronze += person.Bronze
-            resp.Medals.Silver += person.Silver
-            resp.Medals.Total += person.Total
-
-            resp.MedalsByYear[strconv.Itoa(person.Year)] = MedalsResponse{
-                Gold:   person.Gold,
-                Bronze: person.Bronze,
-                Silver: person.Silver,
-                Total:  person.Total,
-            }
-            found = true
-        }
+        resp, found := s.store.persons[name]
         if !found {
             err := fmt.Sprintf("athlete %s not found\n", name)
             s.error(w, r, http.StatusNotFound, err)
