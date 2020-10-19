@@ -173,6 +173,16 @@ func getNewPerson(p PersonInfo) Person {
 	}
 }
 
+func getNewCountryResponse(p PersonInfo) CountryResponse {
+	return CountryResponse{
+		Country: p.Country,
+		Gold:    0,
+		Silver:  0,
+		Bronze:  0,
+		Total:   0,
+	}
+}
+
 // Init ...
 func (store *Store) Init(pathToStoreFile string) {
 	dat, err := ioutil.ReadFile(pathToStoreFile)
@@ -185,6 +195,10 @@ func (store *Store) Init(pathToStoreFile string) {
 	}
 
 	for _, p := range persons {
+		/*
+		   [ athlete info ]
+		*/
+
 		val, ok := store.persons[p.Athlete]
 
 		if !ok {
@@ -196,22 +210,45 @@ func (store *Store) Init(pathToStoreFile string) {
 		val.MedalsByYear[strconv.Itoa(p.Year)] = personToMedal(p)
 		store.persons[p.Athlete] = val
 
+		/*
+		   [ sport Persons info ]
+		*/
+
 		_, ok = store.sportPersons[p.Sport]
 		if !ok {
 			store.sportPersons[p.Sport] = make(map[string]Person)
 		}
 		_, ok = store.sportPersons[p.Sport][p.Athlete]
 		if !ok {
-			sportPerson := getNewPerson(p)
-			store.sportPersons[p.Sport][p.Athlete] = sportPerson
+			store.sportPersons[p.Sport][p.Athlete] = getNewPerson(p)
 		}
-		val, ok = store.sportPersons[p.Sport][p.Athlete]
+		val, _ = store.sportPersons[p.Sport][p.Athlete]
 		update(&val, p)
 		val.MedalsByYear[strconv.Itoa(p.Year)] = personToMedal(p)
 
 		store.sportPersons[p.Sport][p.Athlete] = val
+
+		/*
+		   [ top countries info ]
+		*/
+
+		sYear := strconv.Itoa(p.Year)
+		_, ok = store.yearCountries[sYear]
+		if !ok {
+			store.yearCountries[sYear] = make(map[string]CountryResponse)
+		}
+		_, ok = store.yearCountries[sYear][p.Country]
+		if !ok {
+			store.yearCountries[sYear][p.Country] = getNewCountryResponse(p)
+		}
+		country, _ := store.yearCountries[sYear][p.Country]
+		update(&country, p)
+		store.yearCountries[sYear][p.Country] = country
 	}
 
+	/*
+	   sort sport persons
+	*/
 	for sport, persons := range store.sportPersons {
 		for _, p := range persons {
 			store.sortPersons[sport] = append(store.sortPersons[sport], p)
@@ -232,6 +269,32 @@ func (store *Store) Init(pathToStoreFile string) {
 			}
 		})
 	}
+
+	/*
+	   sort countries
+	*/
+
+	for year, countries := range store.yearCountries {
+		for _, c := range countries {
+			store.sortCountries[year] = append(store.sortCountries[year], c)
+		}
+	}
+
+	for key := range store.sortCountries {
+		sort.Slice(store.sortCountries[key][:], func(i, j int) bool {
+			switch {
+			case store.sortCountries[key][i].Gold != store.sortCountries[key][j].Gold:
+				return store.sortCountries[key][i].Gold > store.sortCountries[key][j].Gold
+			case store.sortCountries[key][i].Silver != store.sortCountries[key][j].Silver:
+				return store.sortCountries[key][i].Silver > store.sortCountries[key][j].Silver
+			case store.sortCountries[key][i].Bronze != store.sortCountries[key][j].Bronze:
+				return store.sortCountries[key][i].Bronze > store.sortCountries[key][j].Bronze
+			default:
+				return store.sortCountries[key][i].Country < store.sortCountries[key][j].Country
+			}
+		})
+	}
+
 }
 
 // NewStore ...
@@ -242,6 +305,7 @@ func NewStore(pathToStoreFile string) *Store {
 		sportPersons:  make(map[string]map[string]Person),
 		sortPersons:   make(map[string][]Person),
 		yearCountries: make(map[string]map[string]CountryResponse),
+		sortCountries: make(map[string][]CountryResponse),
 	}
 	store.Init(pathToStoreFile)
 	return store
@@ -278,7 +342,38 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request, code int, data 
 
 func (s *Server) topCountryHandle() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		s.respond(w, r, http.StatusOK, nil)
+		if r.Method != http.MethodGet {
+			s.error(w, r, http.StatusNotFound, "")
+			return
+		}
+		r.ParseForm()
+		rYear, ok := r.Form["year"]
+		if !ok {
+			s.error(w, r, http.StatusBadRequest, "")
+			return
+		}
+
+		rLimit, ok := r.Form["limit"]
+		limit := 3
+		if ok {
+			var err error
+			limit, err = strconv.Atoi(rLimit[0])
+			if err != nil || limit <= 0 {
+				s.error(w, r, http.StatusBadRequest, "")
+				return
+			}
+		}
+
+		resp, ok := s.store.sortCountries[rYear[0]]
+		if !ok {
+			err := fmt.Sprintf("year %s not found\n", rYear[0])
+			s.error(w, r, http.StatusNotFound, err)
+			return
+		}
+		if limit > len(resp) {
+			limit = len(resp)
+		}
+		s.respond(w, r, http.StatusOK, resp[:limit])
 	}
 }
 
