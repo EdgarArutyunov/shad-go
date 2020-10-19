@@ -364,7 +364,9 @@ func (s *Server) topCountryHandle() http.HandlerFunc {
 			}
 		}
 
+		s.store.mutex.Lock()
 		resp, ok := s.store.sortCountries[rYear[0]]
+		s.store.mutex.Unlock()
 		if !ok {
 			err := fmt.Sprintf("year %s not found\n", rYear[0])
 			s.error(w, r, http.StatusNotFound, err)
@@ -402,7 +404,10 @@ func (s *Server) topAthletesHandle() http.HandlerFunc {
 			}
 		}
 
+		s.store.mutex.Lock()
 		resp, ok := s.store.sortPersons[sport]
+		s.store.mutex.Unlock()
+
 		if !ok {
 			err := fmt.Sprintf("sport %s not found\n", rSport)
 			s.error(w, r, http.StatusNotFound, err)
@@ -424,7 +429,11 @@ func (s *Server) athleteInfoHandle() http.HandlerFunc {
 		r.ParseForm()
 		name := r.Form.Get("name")
 		found := false
+
+		s.store.mutex.Lock()
 		resp, found := s.store.persons[name]
+		s.store.mutex.Unlock()
+
 		if !found {
 			err := fmt.Sprintf("athlete %s not found\n", name)
 			s.error(w, r, http.StatusNotFound, err)
