@@ -80,6 +80,99 @@ type Server struct {
     ...
 */
 
+//PersonInfo
+
+func (pi *Person) getGold() *int {
+	return &pi.Medals.Gold
+}
+
+func (pi *Person) getSilver() *int {
+	return &pi.Medals.Silver
+}
+
+func (pi *Person) getBronze() *int {
+	return &pi.Medals.Bronze
+}
+
+func (pi *Person) getTotal() *int {
+	return &pi.Medals.Total
+}
+
+/*  MedalsResponse */
+
+func (pi *MedalsResponse) getGold() *int {
+	return &pi.Gold
+}
+
+func (pi *MedalsResponse) getSilver() *int {
+	return &pi.Silver
+}
+
+func (pi *MedalsResponse) getBronze() *int {
+	return &pi.Bronze
+}
+
+func (pi *MedalsResponse) getTotal() *int {
+	return &pi.Total
+}
+
+/*  CountryResponse */
+
+func (pi *CountryResponse) getGold() *int {
+	return &pi.Gold
+}
+
+func (pi *CountryResponse) getSilver() *int {
+	return &pi.Silver
+}
+
+func (pi *CountryResponse) getBronze() *int {
+	return &pi.Bronze
+}
+
+func (pi *CountryResponse) getTotal() *int {
+	return &pi.Total
+}
+
+// IMedals ...
+type IMedals interface {
+	getGold() *int
+	getSilver() *int
+	getBronze() *int
+	getTotal() *int
+}
+
+func update(val IMedals, p PersonInfo) {
+	*(val.getGold()) += p.Gold
+	*(val.getSilver()) += p.Silver
+	*(val.getBronze()) += p.Bronze
+	*(val.getTotal()) += p.Total
+}
+
+func personToMedal(p PersonInfo) MedalsResponse {
+	return MedalsResponse{
+		Gold:   p.Gold,
+		Bronze: p.Bronze,
+		Silver: p.Silver,
+		Total:  p.Total,
+	}
+}
+
+func getNewPerson(p PersonInfo) Person {
+	return Person{
+		Athlete: p.Athlete,
+		Country: p.Country,
+		sport:   p.Sport,
+		Medals: MedalsResponse{
+			Gold:   0,
+			Silver: 0,
+			Bronze: 0,
+			Total:  0,
+		},
+		MedalsByYear: make(map[string]MedalsResponse),
+	}
+}
+
 // Init ...
 func (store *Store) Init(pathToStoreFile string) {
 	dat, err := ioutil.ReadFile(pathToStoreFile)
@@ -95,31 +188,12 @@ func (store *Store) Init(pathToStoreFile string) {
 		val, ok := store.persons[p.Athlete]
 
 		if !ok {
-			val = Person{
-				Athlete: p.Athlete,
-				Country: p.Country,
-				sport:   p.Sport,
-				Medals: MedalsResponse{
-					Gold:   0,
-					Silver: 0,
-					Bronze: 0,
-					Total:  0,
-				},
-				MedalsByYear: make(map[string]MedalsResponse),
-			}
+			val = getNewPerson(p)
 		}
 
-		val.Medals.Gold += p.Gold
-		val.Medals.Bronze += p.Bronze
-		val.Medals.Silver += p.Silver
-		val.Medals.Total += p.Total
+		update(&val, p)
 
-		val.MedalsByYear[strconv.Itoa(p.Year)] = MedalsResponse{
-			Gold:   p.Gold,
-			Bronze: p.Bronze,
-			Silver: p.Silver,
-			Total:  p.Total,
-		}
+		val.MedalsByYear[strconv.Itoa(p.Year)] = personToMedal(p)
 		store.persons[p.Athlete] = val
 
 		_, ok = store.sportPersons[p.Sport]
@@ -128,31 +202,12 @@ func (store *Store) Init(pathToStoreFile string) {
 		}
 		_, ok = store.sportPersons[p.Sport][p.Athlete]
 		if !ok {
-			sportPerson := Person{
-				Athlete: p.Athlete,
-				Country: p.Country,
-				sport:   p.Sport,
-				Medals: MedalsResponse{
-					Gold:   0,
-					Silver: 0,
-					Bronze: 0,
-					Total:  0,
-				},
-				MedalsByYear: make(map[string]MedalsResponse),
-			}
+			sportPerson := getNewPerson(p)
 			store.sportPersons[p.Sport][p.Athlete] = sportPerson
 		}
 		val, ok = store.sportPersons[p.Sport][p.Athlete]
-		val.Medals.Gold += p.Gold
-		val.Medals.Bronze += p.Bronze
-		val.Medals.Silver += p.Silver
-		val.Medals.Total += p.Total
-		val.MedalsByYear[strconv.Itoa(p.Year)] = MedalsResponse{
-			Gold:   p.Gold,
-			Bronze: p.Bronze,
-			Silver: p.Silver,
-			Total:  p.Total,
-		}
+		update(&val, p)
+		val.MedalsByYear[strconv.Itoa(p.Year)] = personToMedal(p)
 
 		store.sportPersons[p.Sport][p.Athlete] = val
 	}
