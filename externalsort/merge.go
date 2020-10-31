@@ -25,10 +25,12 @@ func Merge(w LineWriter, readers ...LineReader) error {
 		}
 
 		if err == io.EOF {
-			heap.Push(h, ReadAndVal{
-				readerID: -1,
-				val:      val,
-			})
+			if val != "" {
+				heap.Push(h, ReadAndVal{
+					readerID: -1,
+					val:      val,
+				})
+			}
 			return nil
 		}
 

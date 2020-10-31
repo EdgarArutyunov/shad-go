@@ -2,7 +2,6 @@ package externalsort
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 )
 
@@ -19,9 +18,6 @@ type MyLineReader struct {
 
 // ReadLine ...
 func (mr *MyLineReader) ReadLine() (string, error) {
-	if debug {
-		fmt.Println("ReadLine Called...")
-	}
 	var buf bytes.Buffer
 	for {
 		if mr.readBytes == mr.freeBytes {
