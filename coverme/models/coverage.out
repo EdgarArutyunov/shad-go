@@ -7,5 +7,5 @@ gitlab.com/slon/shad-go/coverme/models/storage.go:53.9,55.3 1 1
 gitlab.com/slon/shad-go/coverme/models/storage.go:60.53,65.31 4 1
 gitlab.com/slon/shad-go/coverme/models/storage.go:69.2,69.17 1 1
 gitlab.com/slon/shad-go/coverme/models/storage.go:65.31,67.3 1 1
-gitlab.com/slon/shad-go/coverme/models/todo.go:19.31,21.2 1 0
-gitlab.com/slon/shad-go/coverme/models/todo.go:23.33,25.2 1 0
+gitlab.com/slon/shad-go/coverme/models/todo.go:19.31,21.2 1 1
+gitlab.com/slon/shad-go/coverme/models/todo.go:23.33,25.2 1 1
