@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -18,15 +19,24 @@ import (
 )
 
 var (
-	errStoreGetAll = errors.New("some error in getting all records")
-	errStoreCreate = errors.New("some error in creating record")
+	errStoreGetAll  = errors.New("some error in getting all records")
+	errStoreCreate  = errors.New("some error in creating record")
+	errStoreGetTodo = errors.New("some error mb not found")
 )
 
-func TestNew(t *testing.T) {
+func TestNewAndStatus(t *testing.T) {
 	db := models.NewInMemoryStorage()
 	app := New(db)
-
 	assert.Equal(t, db, app.db, "New didn't assign passed db ptr")
+
+	req := httptest.NewRequest("GET", "http://example.com/", nil)
+	w := httptest.NewRecorder()
+	app.status(w, req)
+
+	resp := w.Result()
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "Expected OK status")
+
+	app.Start(8080)
 }
 
 func TestList(t *testing.T) {
@@ -151,6 +161,78 @@ func TestAddTodo(t *testing.T) {
 			)
 			w := httptest.NewRecorder()
 			app.addTodo(w, req)
+
+			resp := w.Result()
+			require.Equal(t, tc.expectedCode, resp.StatusCode, "Status codes aren't equal")
+		})
+	}
+}
+
+func TestGetTodo(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := mocks.NewMockStorage(ctrl)
+
+	todoID := 123
+	gomock.InOrder(
+		mockStore.EXPECT().
+			GetTodo(models.ID(todoID)).
+			Return(
+				nil,
+				errStoreGetTodo,
+			),
+
+		mockStore.EXPECT().
+			GetTodo(models.ID(todoID)).
+			Return(
+				&models.Todo{},
+				nil,
+			),
+	)
+
+	app := New(mockStore)
+
+	for _, tc := range []struct {
+		endpoint     string
+		description  string
+		request      *http.Request
+		expectedCode int
+	}{
+		{
+			endpoint:    "get-todo-handler-->",
+			description: "[> bad-id <]",
+			request: httptest.NewRequest(
+				"POST",
+				"http://example.com/todo/bad-id",
+				nil,
+			),
+			expectedCode: http.StatusBadRequest,
+		},
+		{
+			endpoint:    "get-todo-handler-->",
+			description: "[> store-error <]",
+			request: httptest.NewRequest(
+				"POST",
+				"http://example.com/todo/"+strconv.Itoa(todoID),
+				nil,
+			),
+			expectedCode: http.StatusInternalServerError,
+		},
+		{
+			endpoint:    "get-todo-handler-->",
+			description: "[> ok <]",
+			request: httptest.NewRequest(
+				"POST",
+				"http://example.com/todo/"+strconv.Itoa(todoID),
+				nil,
+			),
+			expectedCode: http.StatusOK,
+		},
+	} {
+		t.Run(tc.endpoint+"-"+tc.description, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			app.getTodo(w, tc.request)
 
 			resp := w.Result()
 			require.Equal(t, tc.expectedCode, resp.StatusCode, "Status codes aren't equal")
