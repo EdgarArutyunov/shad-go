@@ -24,27 +24,13 @@ var (
 	errStoreGetTodo = errors.New("some error mb not found")
 )
 
-func TestNewAndStatus(t *testing.T) {
-	db := models.NewInMemoryStorage()
-	app := New(db)
-	assert.Equal(t, db, app.db, "New didn't assign passed db ptr")
-
-	req := httptest.NewRequest("GET", "http://example.com/", nil)
-	w := httptest.NewRecorder()
-	app.status(w, req)
-
-	resp := w.Result()
-	assert.Equal(t, http.StatusOK, resp.StatusCode, "Expected OK status")
-
-	app.Start(8080)
-}
-
 func TestList(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockStore := mocks.NewMockStorage(ctrl)
 	app := New(mockStore)
+	app.initRoutes()
 
 	gomock.InOrder(
 		mockStore.EXPECT().
@@ -65,7 +51,7 @@ func TestList(t *testing.T) {
 	// ok result
 	req := httptest.NewRequest("GET", "http://example.com/todo", nil)
 	w := httptest.NewRecorder()
-	app.list(w, req)
+	app.router.ServeHTTP(w, req)
 
 	resp := w.Result()
 	body, _ := ioutil.ReadAll(resp.Body)
@@ -78,7 +64,7 @@ func TestList(t *testing.T) {
 	// error result
 	req = httptest.NewRequest("GET", "http://example.com/todo", nil)
 	w = httptest.NewRecorder()
-	app.list(w, req)
+	app.router.ServeHTTP(w, req)
 
 	resp = w.Result()
 	assert.Equal(
@@ -111,6 +97,7 @@ func TestAddTodo(t *testing.T) {
 	)
 
 	app := New(mockStore)
+	app.initRoutes()
 
 	for _, tc := range []struct {
 		endpoint     string
@@ -160,7 +147,7 @@ func TestAddTodo(t *testing.T) {
 				body,
 			)
 			w := httptest.NewRecorder()
-			app.addTodo(w, req)
+			app.router.ServeHTTP(w, req)
 
 			resp := w.Result()
 			require.Equal(t, tc.expectedCode, resp.StatusCode, "Status codes aren't equal")
@@ -192,6 +179,7 @@ func TestGetTodo(t *testing.T) {
 	)
 
 	app := New(mockStore)
+	app.initRoutes()
 
 	for _, tc := range []struct {
 		endpoint     string
@@ -203,8 +191,8 @@ func TestGetTodo(t *testing.T) {
 			endpoint:    "get-todo-handler-->",
 			description: "[> bad-id <]",
 			request: httptest.NewRequest(
-				"POST",
-				"http://example.com/todo/bad-id",
+				"GET",
+				"http://example.com/todo/999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999",
 				nil,
 			),
 			expectedCode: http.StatusBadRequest,
@@ -213,7 +201,7 @@ func TestGetTodo(t *testing.T) {
 			endpoint:    "get-todo-handler-->",
 			description: "[> store-error <]",
 			request: httptest.NewRequest(
-				"POST",
+				"GET",
 				"http://example.com/todo/"+strconv.Itoa(todoID),
 				nil,
 			),
@@ -223,7 +211,7 @@ func TestGetTodo(t *testing.T) {
 			endpoint:    "get-todo-handler-->",
 			description: "[> ok <]",
 			request: httptest.NewRequest(
-				"POST",
+				"GET",
 				"http://example.com/todo/"+strconv.Itoa(todoID),
 				nil,
 			),
@@ -232,10 +220,18 @@ func TestGetTodo(t *testing.T) {
 	} {
 		t.Run(tc.endpoint+"-"+tc.description, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			app.getTodo(w, tc.request)
+			app.router.ServeHTTP(w, tc.request)
 
 			resp := w.Result()
 			require.Equal(t, tc.expectedCode, resp.StatusCode, "Status codes aren't equal")
 		})
 	}
+}
+
+func TestStatus(t *testing.T) {
+	w := httptest.NewRecorder()
+	app := New(nil)
+	app.status(w, nil)
+	resp := w.Result()
+	require.Equal(t, http.StatusOK, resp.StatusCode, "Status codes aren't equal")
 }
