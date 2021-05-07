@@ -5,16 +5,14 @@ package spacecollapse
 import (
 	"bytes"
 	"unicode"
-	"unicode/utf8"
 )
 
 // CollapseSpaces ...
 func CollapseSpaces(input string) string {
 	var buf bytes.Buffer
-	for i, lastSpace := 0, false; i < len(input); {
-		r, sz := utf8.DecodeRuneInString(input[i:])
-		i += sz
 
+	lastSpace := false
+	for _, r := range input {
 		if !unicode.IsSpace(r) {
 			lastSpace = false
 			buf.WriteRune(r)
@@ -23,5 +21,6 @@ func CollapseSpaces(input string) string {
 			buf.WriteRune(' ')
 		}
 	}
+
 	return buf.String()
 }

@@ -5,11 +5,12 @@ package hogwarts
 // GetCourseList ...
 func GetCourseList(prereqs map[string][]string) []string {
 	res := make([]string, 0, len(prereqs))
-	used := make(map[string]bool)
-	done := make(map[string]bool)
+	used := make(map[string]struct{})
+	done := make(map[string]struct{})
+
 	var dfs func(cur string)
 	dfs = func(cur string) {
-		used[cur] = true
+		used[cur] = struct{}{}
 		for _, next := range prereqs[cur] {
 			_, cicle := used[next]
 			_, done := done[next]
@@ -23,7 +24,7 @@ func GetCourseList(prereqs map[string][]string) []string {
 
 			dfs(next)
 		}
-		done[cur] = true
+		done[cur] = struct{}{}
 		res = append(res, cur)
 	}
 

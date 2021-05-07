@@ -9,76 +9,89 @@ import (
 	"gitlab.com/slon/shad-go/retryupdate/kvapi"
 )
 
-func get(c kvapi.Client, key string, updateFn func(oldValue *string) (newValue string, err error)) (*kvapi.GetResponse, error) {
+type UpdateFnType func(*string) (string, error)
+
+func get(c kvapi.Client, key string, updateFn UpdateFnType) (*kvapi.GetResponse, error) {
 	var resp *kvapi.GetResponse
+	var eAuth *kvapi.AuthError
+	var err error
+
+	oldVal := new(string)
+
+Loop:
 	for {
-		tmp := ""
-		oldVal := &tmp
-		var err error
 		resp, err = c.Get(&kvapi.GetRequest{
 			Key: key,
 		})
 
-		var eAuth *kvapi.AuthError
-
-		if err == nil {
+		switch {
+		case err == nil:
 			*oldVal = resp.Value
-		} else if errors.Is(err, kvapi.ErrKeyNotFound) {
+			break Loop
+
+		case errors.Is(err, kvapi.ErrKeyNotFound):
 			oldVal = nil
 			resp = &kvapi.GetResponse{
 				Version: uuid.UUID{},
 			}
-		} else if errors.As(err, &eAuth) {
-			return resp, err
-		} else {
+			break Loop
+
+		case errors.As(err, &eAuth):
+			return nil, err
+
+		default:
 			continue
 		}
-
-		newVal, err := updateFn(oldVal)
-		if err != nil {
-			return resp, err
-		}
-		resp.Value = newVal
-		break
 	}
+
+	resp.Value, err = updateFn(oldVal)
+	if err != nil {
+		return nil, err
+	}
+
 	return resp, nil
 }
 
 // UpdateValue ...
-func UpdateValue(c kvapi.Client, key string, updateFn func(oldValue *string) (newValue string, err error)) error {
+func UpdateValue(c kvapi.Client, key string, updateFn UpdateFnType) error {
 	for {
-		getResp, err := get(c, key, updateFn)
-		tryToSet := uuid.Must(uuid.NewV4())
+		resp, err := get(c, key, updateFn)
 		if err != nil {
 			return err
 		}
 
+		newVersion := uuid.Must(uuid.NewV4())
+	Loop:
 		for {
 			_, err := c.Set(&kvapi.SetRequest{
 				Key:        key,
-				Value:      getResp.Value,
-				OldVersion: getResp.Version,
-				NewVersion: tryToSet,
+				Value:      resp.Value,
+				OldVersion: resp.Version,
+				NewVersion: newVersion,
 			})
 
 			var eConf *kvapi.ConflictError
 			var eAuth *kvapi.AuthError
 
-			if err == nil {
+			switch {
+			case err == nil:
 				return nil
-			} else if errors.As(err, &eConf) {
-				if eConf.ExpectedVersion == tryToSet {
-					return nil
-				}
-				if eConf.ExpectedVersion != eConf.ProvidedVersion {
-					break
-				}
-			} else if errors.As(err, &eAuth) {
-				return err
-			} else if errors.Is(err, kvapi.ErrKeyNotFound) {
 
-				getResp.Value, err = updateFn(nil)
-				getResp.Version = uuid.UUID{}
+			case errors.As(err, &eAuth):
+				return err
+
+			case errors.As(err, &eConf):
+				switch {
+				case eConf.ExpectedVersion == newVersion:
+					return nil
+
+				case eConf.ExpectedVersion != eConf.ProvidedVersion:
+					break Loop
+				}
+
+			case errors.Is(err, kvapi.ErrKeyNotFound):
+				resp.Value, err = updateFn(nil)
+				resp.Version = uuid.UUID{}
 				if err != nil {
 					return err
 				}

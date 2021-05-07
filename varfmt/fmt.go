@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
-	"unicode/utf8"
 )
 
 // Sprintf ...
@@ -18,9 +17,7 @@ func Sprintf(format string, args ...interface{}) string {
 
 	st := Nul
 	argNum := 0
-	for i := 0; i < len(format); {
-		r, sz := utf8.DecodeRuneInString(format[i:])
-		i += sz
+	for _, r := range format {
 		switch st {
 		case Nul:
 			if r == '{' {
