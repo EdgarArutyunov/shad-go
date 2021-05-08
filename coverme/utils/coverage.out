@@ -1,0 +1,6 @@
+mode: set
+gitlab.com/slon/shad-go/coverme/utils/httputils.go:10.77,12.16 2 1
+gitlab.com/slon/shad-go/coverme/utils/httputils.go:16.2,21.12 4 1
+gitlab.com/slon/shad-go/coverme/utils/httputils.go:12.16,14.3 1 1
+gitlab.com/slon/shad-go/coverme/utils/httputils.go:24.41,27.2 2 1
+gitlab.com/slon/shad-go/coverme/utils/httputils.go:29.56,32.2 2 1

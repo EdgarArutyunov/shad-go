@@ -2,8 +2,17 @@ package externalsort
 
 import (
 	"container/heap"
+	"fmt"
 	"io"
 )
+
+var (
+	ErrHeapCastError = fmt.Errorf("heap contains unexpected value")
+)
+
+func closed_reader() int {
+	return -1
+}
 
 // Merge ...
 func Merge(w LineWriter, readers ...LineReader) error {
@@ -11,20 +20,22 @@ func Merge(w LineWriter, readers ...LineReader) error {
 	h := &ReadAndValHeap{}
 	heap.Init(h)
 
-	insertNewVal := func(readerID int) error {
-		if readerID < 0 {
+	insertNewValFromReader := func(readerID int) error {
+		if readerID == closed_reader() {
 			return nil
 		}
+
 		val, err := readers[readerID].ReadLine()
-		if err == nil {
+
+		switch err {
+		case nil:
 			heap.Push(h, ReadAndVal{
 				readerID: readerID,
 				val:      val,
 			})
 			return nil
-		}
 
-		if err == io.EOF {
+		case io.EOF:
 			if val != "" {
 				heap.Push(h, ReadAndVal{
 					readerID: -1,
@@ -32,26 +43,33 @@ func Merge(w LineWriter, readers ...LineReader) error {
 				})
 			}
 			return nil
-		}
 
-		return err
+		default:
+			return err
+		}
 	}
 
 	for i := range readers {
-		if err := insertNewVal(i); err != nil {
+		if err := insertNewValFromReader(i); err != nil {
 			return err
 		}
 	}
 
 	for h.Len() > 0 {
-		readAndVal := heap.Pop(h)
-		err := w.Write(readAndVal.(ReadAndVal).val)
-		if err != nil {
+		popValue, ok := heap.Pop(h).(ReadAndVal)
+
+		if !ok {
+			return ErrHeapCastError
+		}
+
+		if err := w.Write(popValue.val); err != nil {
 			return err
 		}
-		if err := insertNewVal(readAndVal.(ReadAndVal).readerID); err != nil {
+
+		if err := insertNewValFromReader(popValue.readerID); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }

@@ -29,42 +29,51 @@ func print(format string, a ...interface{}) {
 // LockKeys ...
 func (l *KeyLock) LockKeys(keys []string, cancel <-chan struct{}) (canceled bool, unlock func()) {
 	for {
-
 		select {
 		case <-l.mt:
 
 		case <-cancel:
 			return true, nil
 		}
-		again := false
+		stop := -1
+
 	Loop:
 		for i, key := range keys {
 			_, ok := l.st[key]
 			if !ok {
-				l.st[key] = make(chan struct{}, 1)
+				l.st[key] = make(chan struct{})
 				continue
 			}
 
 			select {
-			case <-l.st[key]:
+			case <-l.st[keys[i]]:
+				l.st[key] = make(chan struct{})
+				continue
 			default:
-				for j := 0; j < i; j++ {
-					l.st[keys[j]] <- struct{}{}
-				}
-				l.mt <- struct{}{}
-				again = true
+				stop = i
 				break Loop
 			}
 		}
-		if again {
-			continue
+		if stop != -1 {
+			for i := 0; i != stop; i++ {
+				close(l.st[keys[i]])
+			}
+
+			l.mt <- struct{}{}
+
+			select {
+			case <-l.st[keys[stop]]:
+				continue
+			case <-cancel:
+				return true, nil
+			}
 		}
 
 		l.mt <- struct{}{}
 
 		return false, func() {
 			for _, key := range keys {
-				l.st[key] <- struct{}{}
+				close(l.st[key])
 			}
 		}
 	}

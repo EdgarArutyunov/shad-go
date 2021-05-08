@@ -20,6 +20,9 @@ func Sort(w io.Writer, in ...string) error {
 			return err
 		}
 
+		// можем упасть по открытым фд-шникам, но пофиг
+		defer func(f *os.File) { _ = f.Close() }(fr)
+
 		mr := NewReader(fr)
 
 		lines := make([]string, 0)
@@ -38,11 +41,6 @@ func Sort(w io.Writer, in ...string) error {
 			}
 		}
 
-		err = fr.Close()
-		if err != nil {
-			return err
-		}
-
 		sort.Slice(lines, func(i, j int) bool {
 			return lines[i] < lines[j]
 		})
@@ -51,6 +49,7 @@ func Sort(w io.Writer, in ...string) error {
 		if err != nil {
 			return err
 		}
+		defer func(f *os.File) { _ = f.Close() }(fr)
 
 		mw := NewWriter(fw)
 
@@ -60,13 +59,14 @@ func Sort(w io.Writer, in ...string) error {
 				return err
 			}
 		}
-		err = fw.Close()
+
+		fr, err = os.Open(fname)
 		if err != nil {
 			return err
 		}
 
-		fr, err = os.Open(fname)
-		defer fr.Close()
+		defer func(f *os.File) { _ = f.Close() }(fr)
+
 		readers = append(readers, NewReader(fr))
 	}
 

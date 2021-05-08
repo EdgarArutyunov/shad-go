@@ -22,9 +22,7 @@ func (lc *Lc) Get(key int) (int, bool) {
 		return 0, false
 	}
 	lc.l.MoveToBack(elem)
-
-	lc.m[key] = lc.l.Back()
-	return lc.l.Back().Value.(pair).val, true
+	return elem.Value.(pair).val, true
 }
 
 // Set ...
@@ -34,24 +32,24 @@ func (lc *Lc) Set(key, value int) {
 	}
 
 	elem, ok := lc.m[key]
-	if ok {
-		lc.l.MoveToBack(elem)
-		lc.m[key] = lc.l.Back()
-		lc.l.Back().Value = pair{
+	if !ok {
+		if len(lc.m) == lc.cap {
+			delete(lc.m, lc.l.Front().Value.(pair).key)
+			lc.l.Remove(lc.l.Front())
+		}
+
+		lc.m[key] = lc.l.PushBack(pair{
 			key: key,
 			val: value,
-		}
+		})
 		return
 	}
 
-	if len(lc.m) == lc.cap {
-		delete(lc.m, lc.l.Front().Value.(pair).key)
-		lc.l.Remove(lc.l.Front())
-	}
-	lc.m[key] = lc.l.PushBack(pair{
+	lc.l.MoveToBack(elem)
+	elem.Value = pair{
 		key: key,
 		val: value,
-	})
+	}
 }
 
 // Range ...

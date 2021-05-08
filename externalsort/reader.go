@@ -11,8 +11,8 @@ const bufSize = 512
 type MyLineReader struct {
 	r         io.Reader
 	buf       []byte
-	readBytes int // readBytes 0, 1, 2 (how much)
-	freeBytes int // 1, 2, 3
+	bytes     int // read bytes
+	readBytes int // how much we already read to bytes.Buffer in Readline
 	err       error
 }
 
@@ -20,23 +20,21 @@ type MyLineReader struct {
 func (mr *MyLineReader) ReadLine() (string, error) {
 	var buf bytes.Buffer
 	for {
-		if mr.readBytes == mr.freeBytes {
+		if mr.bytes == mr.readBytes {
 			if mr.err != nil {
 				return buf.String(), mr.err
 			}
-			mr.freeBytes, mr.err = mr.r.Read(mr.buf)
+			mr.bytes, mr.err = mr.r.Read(mr.buf)
 			mr.readBytes = 0
 			continue
 		}
-		firstEndLine := bytes.IndexAny(mr.buf[mr.readBytes:mr.freeBytes], "\n")
-		if firstEndLine == -1 {
-			end := mr.freeBytes
-			buf.Write(mr.buf[mr.readBytes:end])
-			mr.readBytes = end
+		newLinePos := bytes.IndexAny(mr.buf[mr.readBytes:mr.bytes], "\n")
+		if newLinePos == -1 {
+			buf.Write(mr.buf[mr.readBytes:mr.bytes])
+			mr.readBytes = mr.bytes
 		} else {
-			end := mr.readBytes + firstEndLine
-			buf.Write(mr.buf[mr.readBytes:end]) // ignore \n
-			mr.readBytes = end + 1              // ignore \n
+			buf.Write(mr.buf[mr.readBytes : mr.readBytes+newLinePos]) // [ : \n)
+			mr.readBytes += newLinePos + 1                            // (\n : ]
 			return buf.String(), mr.err
 		}
 	}
@@ -48,7 +46,7 @@ func NewReader(r io.Reader) LineReader {
 		r:         r,
 		buf:       make([]byte, bufSize),
 		readBytes: 0,
-		freeBytes: 0,
+		bytes:     0,
 		err:       nil,
 	}
 }
