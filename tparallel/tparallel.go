@@ -2,85 +2,72 @@
 
 package tparallel
 
+import "sync"
+
 // T ...
 type T struct {
-	chGo                chan struct{}
-	waitTokenFromParent chan struct{}
-	sendTokensToChild   []chan struct{}
-	waitEndOfChilds     []chan struct{}
-	sendEndToParent     chan struct{}
+	waitParent     chan struct{} // wa
+	parallel       chan struct{} // send to parent that we are in parallel waiting
+	done           chan struct{} // test-function and childs are closed
+	functionClosed chan struct{} // close this ch when test-function closed
+	//signal for childs in parallel waiting
+
+	wg *sync.WaitGroup // wait childs
 }
 
 // Parallel ...
 func (t *T) Parallel() {
-	t.chGo <- struct{}{}
-	<-t.waitTokenFromParent
+	t.parallel <- struct{}{}
+	<-t.waitParent
 }
 
 // Run ...
 func (t *T) Run(subtest func(t *T)) {
+	// когда t завершится, - st можно стартовать
 
-	curEndID := len(t.waitEndOfChilds)
-	t.waitEndOfChilds = append(
-		t.waitEndOfChilds,
-		make(chan struct{}, 1),
-	)
-
-	t.sendTokensToChild = append(
-		t.sendTokensToChild,
-		make(chan struct{}, 1),
-	)
-
-	subT := &T{
-		chGo:                make(chan struct{}, 1),
-		waitTokenFromParent: t.sendTokensToChild[curEndID],
-		sendTokensToChild:   make([]chan struct{}, 0),
-		waitEndOfChilds:     make([]chan struct{}, 0),
-		sendEndToParent:     t.waitEndOfChilds[curEndID],
+	st := &T{
+		parallel:       make(chan struct{}),
+		done:           make(chan struct{}),
+		functionClosed: make(chan struct{}),
+		waitParent:     t.functionClosed,
+		wg:             &sync.WaitGroup{},
 	}
 
-	go func(subT *T, t *T) {
-		subtest(subT)
-		defer func() {
-			for _, send := range subT.sendTokensToChild {
-				send <- struct{}{}
-			}
+	t.wg.Add(1)
 
-			for _, getEnd := range subT.waitEndOfChilds {
-				<-getEnd
-			}
+	go func(st, t *T, subtest func(t *T)) {
+		subtest(st)
+		close(st.functionClosed) // send signal to childs
+		st.wg.Wait()             // Wait childs
 
-			subT.sendEndToParent <- struct{}{}
-		}()
-	}(subT, t)
+		defer close(st.done) // send signal to run
+		defer t.wg.Done()    // end in done
+	}(st, t, subtest)
 
 	select {
-	case <-t.waitEndOfChilds[curEndID]:
-		close(t.waitEndOfChilds[curEndID])
-
-	case <-subT.chGo:
+	case <-st.parallel:
+	case <-st.done:
 	}
 }
 
 // Run ...
 func Run(topTests []func(t *T)) {
-	t := &T{
-		chGo:                nil,
-		waitTokenFromParent: nil,
-		sendTokensToChild:   make([]chan struct{}, 0),
-		waitEndOfChilds:     make([]chan struct{}, 0),
-		sendEndToParent:     nil,
-	}
+	runParallelTests := make(chan struct{})
+	wg := &sync.WaitGroup{}
 
 	for _, tst := range topTests {
+		t := &T{
+			parallel:       nil,
+			functionClosed: runParallelTests, // брейн фак хук в печень
+			// для обычных тестов нам не нужны
+			done:       nil,
+			waitParent: nil,
+			wg:         wg,
+		}
+
 		t.Run(tst)
 	}
 
-	for _, send := range t.sendTokensToChild {
-		send <- struct{}{}
-	}
-
-	for _, wait := range t.waitEndOfChilds {
-		<-wait
-	}
+	close(runParallelTests)
+	wg.Wait()
 }
